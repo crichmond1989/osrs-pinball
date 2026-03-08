@@ -40,8 +40,10 @@ export function HUD({ gp, ballInPlay, lastSkill, ballsFired }: HUDProps) {
       <div data-testid="gp-display">GP: {gp.toLocaleString()}</div>
       <div data-testid="balls-fired">Balls: {ballsFired}</div>
       {lastSkill && <div data-testid="last-skill">{SKILL_LABELS[lastSkill]}</div>}
-      {!ballInPlay && (
-        <div style={{ color: '#aaa', fontSize: 12 }}>Click table to launch</div>
+      {!ballInPlay ? (
+        <div style={{ color: '#aaa', fontSize: 12 }}>Click to place ball</div>
+      ) : (
+        <div style={{ color: '#aaa', fontSize: 12 }}>Hold S / ↓ to fire</div>
       )}
     </div>
   )

@@ -3,6 +3,10 @@ import type { BumperConfig } from '../types'
 
 const { Engine, World, Bodies, Body, Events, Composite } = Matter
 
+export const PLUNGER_LANE_X = 362
+export const PLUNGER_MIN_POWER = 2
+export const PLUNGER_MAX_POWER = 15
+
 export interface PinballTable {
   engine: Matter.Engine
   ball: Matter.Body | null
@@ -124,13 +128,19 @@ export function createTable(
     angle: 0.4,
     label: 'wall',
   })
-  const rightGuide = Bodies.rectangle(w * 0.92, h - 145, 20, 160, {
+  const rightGuide = Bodies.rectangle(330, h - 145, 20, 160, {
     isStatic: true,
-    angle: -0.4,
+    angle: -0.25,
     label: 'wall',
   })
 
-  const walls = [topWall, leftWall, rightWall, drain, leftGuide, rightGuide]
+  // Plunger lane inner wall
+  const plungerWall = Bodies.rectangle(PLUNGER_LANE_X + 3, h / 2, 6, h - 20, { isStatic: true, label: 'wall' })
+
+  // Top arch — 45° arch at top of plunger lane redirects ball left
+  const topArch = Bodies.rectangle(TABLE_WIDTH - 19, 15, 55, 10, { isStatic: true, restitution: 1.0, angle: Math.PI / 4, label: 'wall' })
+
+  const walls = [topWall, leftWall, rightWall, drain, leftGuide, rightGuide, plungerWall, topArch]
 
   World.add(engine.world, [
     ...walls,
@@ -179,22 +189,26 @@ export function createTable(
 }
 
 export function launchBall(table: PinballTable): Matter.Body {
-  // Remove old ball if exists
   if (table.ball) {
     Composite.remove(table.engine.world, table.ball)
   }
 
-  const ball = Bodies.circle(TABLE_WIDTH - 30, TABLE_HEIGHT - 50, BALL_RADIUS, {
-    restitution: 0.6,
-    friction: 0.01,
-    density: 0.004,
-    label: 'ball',
-  })
+  const ball = Bodies.circle(
+    (PLUNGER_LANE_X + TABLE_WIDTH) / 2,  // 381
+    TABLE_HEIGHT - 60,                    // 640
+    BALL_RADIUS,
+    { restitution: 0.6, friction: 0.01, density: 0.004, label: 'ball', isStatic: true },
+  )
 
   World.add(table.engine.world, ball)
-  Body.setVelocity(ball, { x: -2, y: -15 })
   table.ball = ball
   return ball
+}
+
+export function firePlunger(table: PinballTable, power: number): void {
+  if (!table.ball || !table.ball.isStatic) return
+  Body.setStatic(table.ball, false)
+  Body.setVelocity(table.ball, { x: 0, y: -Math.min(Math.max(power, PLUNGER_MIN_POWER), PLUNGER_MAX_POWER) })
 }
 
 export function removeBall(table: PinballTable): void {

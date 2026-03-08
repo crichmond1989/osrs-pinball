@@ -3,6 +3,7 @@ import type { PinballTable } from '../engine/physics'
 import {
   createTable,
   launchBall,
+  firePlunger,
   removeBall,
   activateFlipper,
   deactivateFlipper,
@@ -14,6 +15,8 @@ import {
   BALL_RADIUS,
   FLIPPER_WIDTH,
   FLIPPER_HEIGHT,
+  PLUNGER_LANE_X,
+  PLUNGER_MAX_POWER,
 } from '../engine/physics'
 import { BUMPER_CONFIGS } from '../data/bumpers'
 import type { FlipperState } from '../hooks/useFlipperControls'
@@ -27,6 +30,7 @@ interface PinballCanvasProps {
   onBallLost: () => void
   onLaunchBall: () => void
   flipperState: FlipperState
+  plungerHeld: boolean
 }
 
 export function PinballCanvas({
@@ -37,11 +41,15 @@ export function PinballCanvas({
   onBallLost,
   onLaunchBall,
   flipperState,
+  plungerHeld,
 }: PinballCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const tableRef = useRef<PinballTable | null>(null)
   const animFrameRef = useRef<number>(0)
   const prevFlipperRef = useRef<FlipperState>({ left: false, right: false })
+  const plungerChargeRef = useRef(0)
+  const prevPlungerHeldRef = useRef(false)
+  const plungerHeldRef = useRef(plungerHeld)
 
   const handleBumperHit = useCallback(
     (bumperId: string) => {
@@ -60,6 +68,8 @@ export function PinballCanvas({
       onGeCatch,
       onBallLost: () => {
         removeBall(tableRef.current!)
+        launchBall(tableRef.current!)
+        plungerChargeRef.current = 0
         onBallLost()
       },
     })
@@ -75,8 +85,23 @@ export function PinballCanvas({
   useEffect(() => {
     if (ballInPlay && tableRef.current && !tableRef.current.ball) {
       launchBall(tableRef.current)
+      plungerChargeRef.current = 0
     }
   }, [ballInPlay])
+
+  // Fire plunger on release
+  useEffect(() => {
+    plungerHeldRef.current = plungerHeld
+    const table = tableRef.current
+    /* v8 ignore start */
+    if (!table) return
+    /* v8 ignore stop */
+    if (prevPlungerHeldRef.current && !plungerHeld) {
+      firePlunger(table, plungerChargeRef.current)
+      plungerChargeRef.current = 0
+    }
+    prevPlungerHeldRef.current = plungerHeld
+  }, [plungerHeld])
 
   // Flipper control
   useEffect(() => {
@@ -120,6 +145,14 @@ export function PinballCanvas({
 
       const delta = time - lastTime
       lastTime = time
+
+      // Accumulate plunger charge while held
+      if (plungerHeldRef.current && table.ball?.isStatic) {
+        plungerChargeRef.current = Math.min(
+          plungerChargeRef.current + delta * 0.015,
+          PLUNGER_MAX_POWER,
+        )
+      }
 
       // Don't step physics if GE is open (ball frozen)
       if (!geOpen) {
@@ -199,10 +232,32 @@ export function PinballCanvas({
       ctx.fillRect(-10, -80, 20, 160)
       ctx.restore()
       ctx.save()
-      ctx.translate(TABLE_WIDTH * 0.92, TABLE_HEIGHT - 145)
-      ctx.rotate(-0.4)
+      ctx.translate(330, TABLE_HEIGHT - 145)
+      ctx.rotate(-0.25)
       ctx.fillRect(-10, -80, 20, 160)
       ctx.restore()
+
+      // Draw plunger lane divider wall
+      ctx.strokeStyle = '#8B6914'
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.moveTo(PLUNGER_LANE_X, 0)
+      ctx.lineTo(PLUNGER_LANE_X, TABLE_HEIGHT)
+      ctx.stroke()
+
+      // Draw plunger charge bar
+      const charge = plungerChargeRef.current
+      if (table.ball?.isStatic && charge > 0) {
+        const ratio = charge / PLUNGER_MAX_POWER
+        const hue = 120 - ratio * 120
+        ctx.fillStyle = `hsl(${hue}, 90%, 50%)`
+        ctx.fillRect(
+          PLUNGER_LANE_X + 5,
+          TABLE_HEIGHT - 50 - ratio * 50,
+          TABLE_WIDTH - PLUNGER_LANE_X - 10,
+          ratio * 50,
+        )
+      }
 
       // Frozen indicator
       if (geOpen) {

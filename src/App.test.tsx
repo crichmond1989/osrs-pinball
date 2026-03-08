@@ -29,10 +29,11 @@ vi.mock('./engine/physics', () => ({
     return mockTable
   }),
   launchBall: vi.fn(() => {
-    const ball = { position: { x: 370, y: 650 }, label: 'ball' }
+    const ball = { position: { x: 381, y: 640 }, label: 'ball', isStatic: true }
     mockTable.ball = ball as unknown as PinballTable['ball']
     return ball
   }),
+  firePlunger: vi.fn(),
   removeBall: vi.fn(() => {
     mockTable.ball = null
   }),
@@ -46,6 +47,9 @@ vi.mock('./engine/physics', () => ({
   BUMPER_RADIUS: 25,
   FLIPPER_WIDTH: 80,
   FLIPPER_HEIGHT: 16,
+  PLUNGER_LANE_X: 362,
+  PLUNGER_MIN_POWER: 2,
+  PLUNGER_MAX_POWER: 15,
 }))
 
 const mockCtx = {
@@ -108,11 +112,11 @@ describe('App', () => {
     expect(screen.queryByTestId('grand-exchange')).not.toBeInTheDocument()
   })
 
-  it('launches ball when canvas is clicked', () => {
+  it('ball auto-spawns on mount, canvas click does nothing when ball is in play', () => {
     render(<App />)
-    rafCallCount = 0
+    expect(screen.getByTestId('balls-fired')).toHaveTextContent('Balls: 0')
     fireEvent.click(screen.getByTestId('pinball-canvas'))
-    expect(screen.getByTestId('balls-fired')).toHaveTextContent('Balls: 1')
+    expect(screen.getByTestId('balls-fired')).toHaveTextContent('Balls: 0')
   })
 
   it('handles flipper keyboard controls', () => {
@@ -122,6 +126,17 @@ describe('App', () => {
     })
     act(() => {
       window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' }))
+    })
+    expect(screen.getByTestId('pinball-canvas')).toBeInTheDocument()
+  })
+
+  it('handles plunger keyboard controls', () => {
+    render(<App />)
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' }))
+    })
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 's' }))
     })
     expect(screen.getByTestId('pinball-canvas')).toBeInTheDocument()
   })
@@ -167,15 +182,13 @@ describe('App', () => {
     expect(gpAfter).not.toBe(gpBefore)
   })
 
-  it('handles ball lost', () => {
+  it('handles ball lost: increments ballsFired and auto-respawns', () => {
     render(<App />)
-    rafCallCount = 0
-    fireEvent.click(screen.getByTestId('pinball-canvas'))
-    expect(screen.getByTestId('balls-fired')).toHaveTextContent('Balls: 1')
+    expect(screen.getByTestId('balls-fired')).toHaveTextContent('Balls: 0')
     act(() => {
       capturedCallbacks!.onBallLost()
     })
-    // Ball should be lost, can launch again
-    expect(screen.getByText('Click table to launch')).toBeInTheDocument()
+    expect(screen.getByTestId('balls-fired')).toHaveTextContent('Balls: 1')
+    expect(screen.getByText('Hold S / ↓ to fire')).toBeInTheDocument()
   })
 })

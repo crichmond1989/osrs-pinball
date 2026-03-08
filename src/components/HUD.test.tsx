@@ -20,12 +20,17 @@ describe('HUD', () => {
 
   it('shows launch hint when ball not in play', () => {
     render(<HUD gp={0} ballInPlay={false} lastSkill={null} ballsFired={0} />)
-    expect(screen.getByText('Click table to launch')).toBeInTheDocument()
+    expect(screen.getByText('Click to place ball')).toBeInTheDocument()
   })
 
-  it('hides launch hint when ball is in play', () => {
+  it('shows fire hint when ball is in play', () => {
     render(<HUD gp={0} ballInPlay={true} lastSkill={null} ballsFired={0} />)
-    expect(screen.queryByText('Click table to launch')).not.toBeInTheDocument()
+    expect(screen.getByText('Hold S / ↓ to fire')).toBeInTheDocument()
+  })
+
+  it('hides place ball hint when ball is in play', () => {
+    render(<HUD gp={0} ballInPlay={true} lastSkill={null} ballsFired={0} />)
+    expect(screen.queryByText('Click to place ball')).not.toBeInTheDocument()
   })
 
   it('does not show last skill when null', () => {

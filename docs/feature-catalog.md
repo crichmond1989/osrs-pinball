@@ -11,3 +11,4 @@
 | 05 | Grand Exchange | 2026-03 | [05-grand-exchange.md](2026-03/05-grand-exchange.md) |
 | 06 | Inventory System | 2026-03 | [06-inventory-system.md](2026-03/06-inventory-system.md) |
 | 07 | Equipment System | 2026-03 | [07-equipment-system.md](2026-03/07-equipment-system.md) |
+| 08 | Plunger Lane & Auto-Respawn | 2026-03 | [08-plunger-and-auto-respawn.md](2026-03/08-plunger-and-auto-respawn.md) |

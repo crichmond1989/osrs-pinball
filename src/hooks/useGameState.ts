@@ -28,7 +28,7 @@ export function useGameState() {
   }, [])
 
   const loseBall = useCallback(() => {
-    setState((prev) => ({ ...prev, ballInPlay: false, lastSkill: null }))
+    setState((prev) => ({ ...prev, ballsFired: prev.ballsFired + 1, lastSkill: null }))
   }, [])
 
   const openGe = useCallback(() => {

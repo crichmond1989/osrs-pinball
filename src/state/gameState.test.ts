@@ -26,7 +26,7 @@ describe('gameState', () => {
     it('creates initial state with defaults', () => {
       const state = createInitialGameState()
       expect(state.gp).toBe(500)
-      expect(state.ballInPlay).toBe(false)
+      expect(state.ballInPlay).toBe(true)
       expect(state.geOpen).toBe(false)
       expect(state.lastSkill).toBeNull()
       expect(state.ballsFired).toBe(0)

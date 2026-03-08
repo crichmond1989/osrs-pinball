@@ -8,6 +8,7 @@ import { MobileControls } from './components/MobileControls'
 import { useGameState } from './hooks/useGameState'
 import { useFlipperControls } from './hooks/useFlipperControls'
 import type { FlipperState } from './hooks/useFlipperControls'
+import { usePlungerControl } from './hooks/usePlungerControl'
 
 export default function App() {
   const {
@@ -29,6 +30,12 @@ export default function App() {
   }, [])
 
   const { handleTouchStart, handleTouchEnd } = useFlipperControls(handleFlipperChange)
+
+  const [plungerHeld, setPlungerHeld] = useState(false)
+  const handlePlungerChange = useCallback((held: boolean) => {
+    setPlungerHeld(held)
+  }, [])
+  usePlungerControl(handlePlungerChange)
 
   return (
     <div
@@ -69,6 +76,7 @@ export default function App() {
             onBallLost={loseBall}
             onLaunchBall={launchBall}
             flipperState={flipperState}
+            plungerHeld={plungerHeld}
           />
           <MobileControls onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} />
         </div>

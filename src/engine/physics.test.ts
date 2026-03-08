@@ -3,6 +3,7 @@ import Matter from 'matter-js'
 import {
   createTable,
   launchBall,
+  firePlunger,
   removeBall,
   activateFlipper,
   deactivateFlipper,
@@ -14,6 +15,9 @@ import {
   BUMPER_RADIUS,
   FLIPPER_WIDTH,
   FLIPPER_HEIGHT,
+  PLUNGER_LANE_X,
+  PLUNGER_MIN_POWER,
+  PLUNGER_MAX_POWER,
 } from './physics'
 import type { CollisionCallback } from './physics'
 import { BUMPER_CONFIGS } from '../data/bumpers'
@@ -36,6 +40,9 @@ describe('physics', () => {
     expect(BUMPER_RADIUS).toBe(25)
     expect(FLIPPER_WIDTH).toBe(80)
     expect(FLIPPER_HEIGHT).toBe(16)
+    expect(PLUNGER_LANE_X).toBe(362)
+    expect(PLUNGER_MIN_POWER).toBe(2)
+    expect(PLUNGER_MAX_POWER).toBe(15)
   })
 
   describe('createTable', () => {
@@ -47,7 +54,7 @@ describe('physics', () => {
       expect(table.rightFlipper).toBeDefined()
       expect(table.bumpers).toHaveLength(BUMPER_CONFIGS.length)
       expect(table.geCatch).toBeDefined()
-      expect(table.walls).toHaveLength(6) // top, left, right, drain, 2 guides
+      expect(table.walls).toHaveLength(8) // top, left, right, drain, 2 guides, plungerWall, topArch
       expect(table.width).toBe(TABLE_WIDTH)
       expect(table.height).toBe(TABLE_HEIGHT)
       destroyTable(table)
@@ -77,6 +84,56 @@ describe('physics', () => {
       const ball2 = launchBall(table)
       expect(ball2).not.toBe(ball1)
       expect(table.ball).toBe(ball2)
+      destroyTable(table)
+    })
+  })
+
+  describe('firePlunger', () => {
+    it('fires ball when it is static — ball becomes non-static and gets upward velocity', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      launchBall(table)
+      expect(table.ball!.isStatic).toBe(true)
+      firePlunger(table, 10)
+      expect(table.ball!.isStatic).toBe(false)
+      expect(table.ball!.velocity.y).toBeLessThan(0)
+      destroyTable(table)
+    })
+
+    it('does nothing when ball is already non-static', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      launchBall(table)
+      firePlunger(table, 10)
+      const velBefore = { ...table.ball!.velocity }
+      firePlunger(table, 10)
+      // velocity should be unchanged (gravity may change it slightly, but ball is not static so firePlunger returns early)
+      expect(table.ball!.isStatic).toBe(false)
+      // The second call should not have changed velocity since ball is not static
+      expect(table.ball!.velocity.y).toBe(velBefore.y)
+      destroyTable(table)
+    })
+
+    it('does nothing when no ball exists', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      expect(table.ball).toBeNull()
+      // Should not throw
+      firePlunger(table, 10)
+      expect(table.ball).toBeNull()
+      destroyTable(table)
+    })
+
+    it('caps power at PLUNGER_MAX_POWER', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      launchBall(table)
+      firePlunger(table, PLUNGER_MAX_POWER + 100)
+      expect(table.ball!.velocity.y).toBeCloseTo(-PLUNGER_MAX_POWER)
+      destroyTable(table)
+    })
+
+    it('enforces minimum power even when power is 0', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      launchBall(table)
+      firePlunger(table, 0)
+      expect(table.ball!.velocity.y).toBeCloseTo(-PLUNGER_MIN_POWER)
       destroyTable(table)
     })
   })
@@ -134,9 +191,10 @@ describe('physics', () => {
     it('steps the physics engine', () => {
       const table = createTable(BUMPER_CONFIGS, callbacks)
       launchBall(table)
+      firePlunger(table, 10)
       const posBefore = { ...table.ball!.position }
       stepEngine(table.engine)
-      // Ball should have moved due to gravity
+      // Ball should have moved due to velocity
       expect(table.ball!.position.y).not.toBe(posBefore.y)
       destroyTable(table)
     })

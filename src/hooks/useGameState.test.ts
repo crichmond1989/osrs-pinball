@@ -7,7 +7,7 @@ describe('useGameState', () => {
   it('initializes with default state', () => {
     const { result } = renderHook(() => useGameState())
     expect(result.current.state.gp).toBe(500)
-    expect(result.current.state.ballInPlay).toBe(false)
+    expect(result.current.state.ballInPlay).toBe(true)
     expect(result.current.state.geOpen).toBe(false)
     expect(result.current.state.lastSkill).toBeNull()
     expect(result.current.state.ballsFired).toBe(0)
@@ -32,12 +32,12 @@ describe('useGameState', () => {
     expect(result.current.state.ballsFired).toBe(1)
   })
 
-  it('loseBall resets ball state', () => {
+  it('loseBall keeps ball in play, increments ballsFired, resets lastSkill', () => {
     const { result } = renderHook(() => useGameState())
-    act(() => result.current.launchBall())
     act(() => result.current.setLastSkill('fishing'))
     act(() => result.current.loseBall())
-    expect(result.current.state.ballInPlay).toBe(false)
+    expect(result.current.state.ballInPlay).toBe(true)
+    expect(result.current.state.ballsFired).toBe(1)
     expect(result.current.state.lastSkill).toBeNull()
   })
 

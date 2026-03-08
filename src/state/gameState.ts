@@ -29,7 +29,7 @@ export function createInitialGameState(): GameState {
     gp: 500,
     inventory: createInitialInventory(),
     equipment: createInitialEquipment(),
-    ballInPlay: false,
+    ballInPlay: true,
     geOpen: false,
     lastSkill: null,
     ballsFired: 0,
