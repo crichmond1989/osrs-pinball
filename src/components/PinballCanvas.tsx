@@ -194,14 +194,14 @@ export function PinballCanvas({
       // Draw guide walls
       ctx.fillStyle = '#8B6914'
       ctx.save()
-      ctx.translate(TABLE_WIDTH * 0.08, TABLE_HEIGHT - 160)
+      ctx.translate(TABLE_WIDTH * 0.08, TABLE_HEIGHT - 145)
       ctx.rotate(0.4)
-      ctx.fillRect(-10, -60, 20, 120)
+      ctx.fillRect(-10, -80, 20, 160)
       ctx.restore()
       ctx.save()
-      ctx.translate(TABLE_WIDTH * 0.92, TABLE_HEIGHT - 160)
+      ctx.translate(TABLE_WIDTH * 0.92, TABLE_HEIGHT - 145)
       ctx.rotate(-0.4)
-      ctx.fillRect(-10, -60, 20, 120)
+      ctx.fillRect(-10, -80, 20, 160)
       ctx.restore()
 
       // Frozen indicator

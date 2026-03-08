@@ -1,15 +1,13 @@
 import Matter from 'matter-js'
 import type { BumperConfig } from '../types'
 
-const { Engine, World, Bodies, Body, Constraint, Events, Composite } = Matter
+const { Engine, World, Bodies, Body, Events, Composite } = Matter
 
 export interface PinballTable {
   engine: Matter.Engine
   ball: Matter.Body | null
   leftFlipper: Matter.Body
   rightFlipper: Matter.Body
-  leftFlipperConstraint: Matter.Constraint
-  rightFlipperConstraint: Matter.Constraint
   bumpers: Matter.Body[]
   geCatch: Matter.Body
   walls: Matter.Body[]
@@ -29,6 +27,29 @@ export const BALL_RADIUS = 10
 export const BUMPER_RADIUS = 25
 export const FLIPPER_WIDTH = 80
 export const FLIPPER_HEIGHT = 16
+
+const FLIPPER_PIVOT_OFFSET = FLIPPER_WIDTH / 2 - FLIPPER_HEIGHT / 2 // 32
+const FLIPPER_REST_ANGLE = 0.4   // tip angled down
+const FLIPPER_ACTIVE_ANGLE = -0.4 // tip angled up
+
+// Compute the world position of the flipper's pivot (stays fixed during rotation).
+// localOffsetX is the signed distance from body center to pivot along body's local x-axis.
+function getFlipperPivot(flipper: Matter.Body, localOffsetX: number): { x: number; y: number } {
+  return {
+    x: flipper.position.x + localOffsetX * Math.cos(flipper.angle),
+    y: flipper.position.y + localOffsetX * Math.sin(flipper.angle),
+  }
+}
+
+// Rotate the flipper to a new angle keeping the pivot point fixed in world space.
+function setFlipperAngle(flipper: Matter.Body, localOffsetX: number, angle: number): void {
+  const pivot = getFlipperPivot(flipper, localOffsetX)
+  Body.setPosition(flipper, {
+    x: pivot.x - localOffsetX * Math.cos(angle),
+    y: pivot.y - localOffsetX * Math.sin(angle),
+  })
+  Body.setAngle(flipper, angle)
+}
 
 export function createTable(
   bumperConfigs: BumperConfig[],
@@ -54,38 +75,31 @@ export function createTable(
     label: 'drain',
   })
 
-  // Flipper base positions
-  const flipperY = h - 80
-  const leftFlipperX = w * 0.3
-  const rightFlipperX = w * 0.7
+  // Flipper pivot positions
+  const flipperY = h - 80       // 620
+  const leftPivotX = w * 0.25   // 100
+  const rightPivotX = w * 0.75  // 300
 
-  // Left flipper
-  const leftFlipper = Bodies.rectangle(leftFlipperX, flipperY, FLIPPER_WIDTH, FLIPPER_HEIGHT, {
-    label: 'leftFlipper',
-    chamfer: { radius: FLIPPER_HEIGHT / 2 },
-    density: 0.02,
-  })
-  const leftFlipperConstraint = Constraint.create({
-    bodyA: leftFlipper,
-    pointA: { x: -FLIPPER_WIDTH / 2 + FLIPPER_HEIGHT / 2, y: 0 },
-    pointB: { x: leftFlipperX - FLIPPER_WIDTH / 2 + FLIPPER_HEIGHT / 2, y: flipperY },
-    length: 0,
-    stiffness: 0.9,
-  })
+  // Left flipper: pivot at left end (localOffsetX = -FLIPPER_PIVOT_OFFSET)
+  const leftLocalOffset = -FLIPPER_PIVOT_OFFSET
+  const leftFlipper = Bodies.rectangle(
+    leftPivotX - leftLocalOffset * Math.cos(FLIPPER_REST_ANGLE),
+    flipperY - leftLocalOffset * Math.sin(FLIPPER_REST_ANGLE),
+    FLIPPER_WIDTH, FLIPPER_HEIGHT,
+    { isStatic: true, label: 'leftFlipper', chamfer: { radius: FLIPPER_HEIGHT / 2 } },
+  )
+  Body.setAngle(leftFlipper, FLIPPER_REST_ANGLE)
 
-  // Right flipper
-  const rightFlipper = Bodies.rectangle(rightFlipperX, flipperY, FLIPPER_WIDTH, FLIPPER_HEIGHT, {
-    label: 'rightFlipper',
-    chamfer: { radius: FLIPPER_HEIGHT / 2 },
-    density: 0.02,
-  })
-  const rightFlipperConstraint = Constraint.create({
-    bodyA: rightFlipper,
-    pointA: { x: FLIPPER_WIDTH / 2 - FLIPPER_HEIGHT / 2, y: 0 },
-    pointB: { x: rightFlipperX + FLIPPER_WIDTH / 2 - FLIPPER_HEIGHT / 2, y: flipperY },
-    length: 0,
-    stiffness: 0.9,
-  })
+  // Right flipper: pivot at right end (localOffsetX = +FLIPPER_PIVOT_OFFSET)
+  const rightLocalOffset = FLIPPER_PIVOT_OFFSET
+  const rightFlipperRestAngle = -FLIPPER_REST_ANGLE
+  const rightFlipper = Bodies.rectangle(
+    rightPivotX - rightLocalOffset * Math.cos(rightFlipperRestAngle),
+    flipperY - rightLocalOffset * Math.sin(rightFlipperRestAngle),
+    FLIPPER_WIDTH, FLIPPER_HEIGHT,
+    { isStatic: true, label: 'rightFlipper', chamfer: { radius: FLIPPER_HEIGHT / 2 } },
+  )
+  Body.setAngle(rightFlipper, rightFlipperRestAngle)
 
   // Bumpers
   const bumpers = bumperConfigs.map((config) =>
@@ -103,13 +117,14 @@ export function createTable(
     label: 'geCatch',
   })
 
-  // Lower guide walls (funnel to flippers)
-  const leftGuide = Bodies.rectangle(w * 0.08, h - 160, 20, 120, {
+  // Lower guide walls — extended to reach near the side walls at flipper height,
+  // closing the gap that previously allowed the ball to bypass the flippers.
+  const leftGuide = Bodies.rectangle(w * 0.08, h - 145, 20, 160, {
     isStatic: true,
     angle: 0.4,
     label: 'wall',
   })
-  const rightGuide = Bodies.rectangle(w * 0.92, h - 160, 20, 120, {
+  const rightGuide = Bodies.rectangle(w * 0.92, h - 145, 20, 160, {
     isStatic: true,
     angle: -0.4,
     label: 'wall',
@@ -121,8 +136,6 @@ export function createTable(
     ...walls,
     leftFlipper,
     rightFlipper,
-    leftFlipperConstraint,
-    rightFlipperConstraint,
     ...bumpers,
     geCatch,
   ])
@@ -157,8 +170,6 @@ export function createTable(
     ball: null,
     leftFlipper,
     rightFlipper,
-    leftFlipperConstraint,
-    rightFlipperConstraint,
     bumpers,
     geCatch,
     walls,
@@ -194,13 +205,15 @@ export function removeBall(table: PinballTable): void {
 }
 
 export function activateFlipper(flipper: Matter.Body, direction: 'left' | 'right'): void {
-  const torque = direction === 'left' ? -0.05 : 0.05
-  Body.setAngularVelocity(flipper, torque)
+  const localOffsetX = direction === 'left' ? -FLIPPER_PIVOT_OFFSET : FLIPPER_PIVOT_OFFSET
+  const angle = direction === 'left' ? FLIPPER_ACTIVE_ANGLE : -FLIPPER_ACTIVE_ANGLE
+  setFlipperAngle(flipper, localOffsetX, angle)
 }
 
 export function deactivateFlipper(flipper: Matter.Body, direction: 'left' | 'right'): void {
-  const torque = direction === 'left' ? 0.03 : -0.03
-  Body.setAngularVelocity(flipper, torque)
+  const localOffsetX = direction === 'left' ? -FLIPPER_PIVOT_OFFSET : FLIPPER_PIVOT_OFFSET
+  const angle = direction === 'left' ? FLIPPER_REST_ANGLE : -FLIPPER_REST_ANGLE
+  setFlipperAngle(flipper, localOffsetX, angle)
 }
 
 export function stepEngine(engine: Matter.Engine, delta: number = 1000 / 60): void {

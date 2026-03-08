@@ -14,10 +14,8 @@ const mockBumpers = BUMPER_CONFIGS.map((c) => ({
 const mockTable: PinballTable = {
   engine: { world: { bodies: [] } } as unknown as PinballTable['engine'],
   ball: null,
-  leftFlipper: { angularVelocity: 0, position: { x: 120, y: 620 }, angle: 0 } as unknown as PinballTable['leftFlipper'],
-  rightFlipper: { angularVelocity: 0, position: { x: 280, y: 620 }, angle: 0 } as unknown as PinballTable['rightFlipper'],
-  leftFlipperConstraint: {} as PinballTable['leftFlipperConstraint'],
-  rightFlipperConstraint: {} as PinballTable['rightFlipperConstraint'],
+  leftFlipper: { angularVelocity: 0, position: { x: 129, y: 632 }, angle: 0.4 } as unknown as PinballTable['leftFlipper'],
+  rightFlipper: { angularVelocity: 0, position: { x: 270, y: 632 }, angle: -0.4 } as unknown as PinballTable['rightFlipper'],
   bumpers: mockBumpers,
   geCatch: { position: { x: 200, y: 56 } } as unknown as PinballTable['geCatch'],
   walls: [],

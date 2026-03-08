@@ -45,13 +45,18 @@ describe('physics', () => {
       expect(table.ball).toBeNull()
       expect(table.leftFlipper).toBeDefined()
       expect(table.rightFlipper).toBeDefined()
-      expect(table.leftFlipperConstraint).toBeDefined()
-      expect(table.rightFlipperConstraint).toBeDefined()
       expect(table.bumpers).toHaveLength(BUMPER_CONFIGS.length)
       expect(table.geCatch).toBeDefined()
       expect(table.walls).toHaveLength(6) // top, left, right, drain, 2 guides
       expect(table.width).toBe(TABLE_WIDTH)
       expect(table.height).toBe(TABLE_HEIGHT)
+      destroyTable(table)
+    })
+
+    it('creates flippers at rest angles', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      expect(table.leftFlipper.angle).toBeCloseTo(0.4)
+      expect(table.rightFlipper.angle).toBeCloseTo(-0.4)
       destroyTable(table)
     })
   })
@@ -97,28 +102,30 @@ describe('physics', () => {
     it('activates left flipper', () => {
       const table = createTable(BUMPER_CONFIGS, callbacks)
       activateFlipper(table.leftFlipper, 'left')
-      expect(table.leftFlipper.angularVelocity).toBe(-0.05)
+      expect(table.leftFlipper.angle).toBeCloseTo(-0.4)
       destroyTable(table)
     })
 
     it('activates right flipper', () => {
       const table = createTable(BUMPER_CONFIGS, callbacks)
       activateFlipper(table.rightFlipper, 'right')
-      expect(table.rightFlipper.angularVelocity).toBe(0.05)
+      expect(table.rightFlipper.angle).toBeCloseTo(0.4)
       destroyTable(table)
     })
 
     it('deactivates left flipper', () => {
       const table = createTable(BUMPER_CONFIGS, callbacks)
+      activateFlipper(table.leftFlipper, 'left')
       deactivateFlipper(table.leftFlipper, 'left')
-      expect(table.leftFlipper.angularVelocity).toBe(0.03)
+      expect(table.leftFlipper.angle).toBeCloseTo(0.4)
       destroyTable(table)
     })
 
     it('deactivates right flipper', () => {
       const table = createTable(BUMPER_CONFIGS, callbacks)
+      activateFlipper(table.rightFlipper, 'right')
       deactivateFlipper(table.rightFlipper, 'right')
-      expect(table.rightFlipper.angularVelocity).toBe(-0.03)
+      expect(table.rightFlipper.angle).toBeCloseTo(-0.4)
       destroyTable(table)
     })
   })
