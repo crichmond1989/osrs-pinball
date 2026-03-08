@@ -278,4 +278,216 @@ describe('physics', () => {
       destroyTable(table)
     })
   })
+
+  describe('integration: plunger and drain game flow (real physics)', () => {
+    // Note: multi-step physics tests are unreliable because the mock onBallLost callback
+    // does not remove the ball, so it falls through the sensor and eventually overflows.
+    // These tests use one real physics step (safe) plus Matter.Events.trigger with the
+    // actual engine bodies for the drain scenarios.
+
+    it('ball has upward velocity after firing and moves up on first physics step', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      launchBall(table)
+      const spawnY = table.ball!.position.y  // 640
+
+      firePlunger(table, 10)
+
+      // Physics state immediately after firing
+      expect(table.ball!.isStatic).toBe(false)
+      expect(table.ball!.velocity.y).toBeLessThan(0) // negative y = upward
+
+      // One real physics step — ball must have moved upward
+      stepEngine(table.engine, 16)
+      expect(table.ball!.position.y).toBeLessThan(spawnY)
+      expect(callbacks.onBallLost).not.toHaveBeenCalled()
+      destroyTable(table)
+    })
+
+    it('drain body collision fires onBallLost for a live (non-static) ball', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      launchBall(table)
+      firePlunger(table, 10) // ball is now live and non-static
+
+      // Find the real drain body that createTable added to the world
+      const drainBody = Matter.Composite.allBodies(table.engine.world)
+        .find((b) => b.label === 'drain')!
+      expect(drainBody).toBeDefined()
+
+      // Trigger the collision event using real engine bodies (not stub objects)
+      Matter.Events.trigger(table.engine, 'collisionStart', {
+        pairs: [{ bodyA: drainBody, bodyB: table.ball! }],
+      })
+
+      expect(callbacks.onBallLost).toHaveBeenCalled()
+      destroyTable(table)
+    })
+
+    it('ball enters playing field after max-power plunger shot', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      launchBall(table)
+      firePlunger(table, PLUNGER_MAX_POWER)
+
+      // Run up to 100 physics steps — ball must cross the plunger wall into the main field
+      let enteredField = false
+      for (let i = 0; i < 100; i++) {
+        stepEngine(table.engine)
+        if (table.ball!.position.x < PLUNGER_LANE_X) {
+          enteredField = true
+          break
+        }
+      }
+
+      expect(enteredField).toBe(true)
+      expect(callbacks.onBallLost).not.toHaveBeenCalled()
+      destroyTable(table)
+    })
+
+    it('full cycle: plunger fires ball → ball drains → callback respawns static ball in gutter', () => {
+      let drainFired = false
+      const intCallbacks = {
+        onBumperHit: vi.fn(),
+        onGeCatch: vi.fn(),
+        onBallLost: () => {
+          drainFired = true
+          // Mirrors exactly what PinballCanvas.onBallLost does
+          removeBall(table)
+          launchBall(table)
+        },
+      }
+      const table = createTable(BUMPER_CONFIGS, intCallbacks)
+
+      // Ball auto-spawns as static in the plunger gutter
+      launchBall(table)
+      expect(table.ball!.isStatic).toBe(true)
+      expect(table.ball!.position.y).toBe(TABLE_HEIGHT - 60)
+
+      // Player fires plunger — ball enters the playfield
+      firePlunger(table, 10)
+      expect(table.ball!.isStatic).toBe(false)
+
+      // One real physics step confirms ball is moving upward, not draining
+      const liveBall = table.ball!
+      stepEngine(table.engine, 16)
+      expect(table.ball!.position.y).toBeLessThan(TABLE_HEIGHT - 60)
+
+      // Ball misses the flippers and reaches the drain sensor
+      const drainBody = Matter.Composite.allBodies(table.engine.world)
+        .find((b) => b.label === 'drain')!
+      Matter.Events.trigger(table.engine, 'collisionStart', {
+        pairs: [{ bodyA: drainBody, bodyB: liveBall }],
+      })
+
+      // Drain callback fired; old ball removed, fresh ball placed in gutter
+      expect(drainFired).toBe(true)
+      expect(table.ball).not.toBeNull()
+      expect(table.ball).not.toBe(liveBall) // different object — freshly spawned
+      expect(table.ball!.isStatic).toBe(true)
+      expect(table.ball!.position.y).toBe(TABLE_HEIGHT - 60)
+
+      destroyTable(table)
+    })
+  })
+
+  describe('integration: flipper mechanics (real physics)', () => {
+    // Flipper geometry constants derived from createTable:
+    //   flipperY = TABLE_HEIGHT - 80 = 620
+    //   leftFlipper pivot  at x=100, rightFlipper pivot at x=300
+    //   Active left flipper center ≈ (130, 608); active right flipper center ≈ (270, 608)
+    //
+    // TODO: The active-flipper deflection tests below are fragile because the ball contacts
+    // the flipper at y≈588 — just below the y>580 threshold — so the reachedFlipper flag
+    // and the vy<0 check must fire in the same physics step. This works in CI but has proven
+    // sensitive to subtle environment differences (Matter.js substep timing, platform FP rounding).
+    // A more robust approach would be to decouple the "ball reached flipper zone" check from
+    // the "ball is moving upward" check, or to assert solely that onBallLost is NOT called
+    // within a short window (proving the flipper prevented the drain without relying on velocity).
+
+    function dropBallOntoFlipper(
+      table: ReturnType<typeof import('./physics').createTable>,
+      x: number,
+      startY: number,
+      downwardSpeed: number,
+    ) {
+      // Make the gutter ball dynamic, teleport it above the flipper, give it downward speed.
+      Matter.Body.setStatic(table.ball!, false)
+      Matter.Body.setPosition(table.ball!, { x, y: startY })
+      Matter.Body.setVelocity(table.ball!, { x: 0, y: downwardSpeed })
+    }
+
+    it('active left flipper deflects ball upward (no drain)', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      launchBall(table)
+
+      dropBallOntoFlipper(table, 130, 560, 10)
+      activateFlipper(table.leftFlipper, 'left')
+
+      // Ball contacts the flipper around y≈588 (below the flipper surface).
+      // Track once ball enters the lower field (y > 580) and check that vy
+      // becomes negative (upward) in the same or next step — proving deflection.
+      let reachedFlipper = false
+      let deflectedUpward = false
+      for (let i = 0; i < 60; i++) {
+        stepEngine(table.engine)
+        if (table.ball!.position.y > 580) reachedFlipper = true
+        if (reachedFlipper && table.ball!.velocity.y < 0) {
+          deflectedUpward = true
+          break
+        }
+      }
+
+      expect(reachedFlipper).toBe(true)
+      expect(deflectedUpward).toBe(true)
+      expect(callbacks.onBallLost).not.toHaveBeenCalled()
+      destroyTable(table)
+    })
+
+    it('active right flipper deflects ball upward (no drain)', () => {
+      const table = createTable(BUMPER_CONFIGS, callbacks)
+      launchBall(table)
+
+      dropBallOntoFlipper(table, 270, 560, 10)
+      activateFlipper(table.rightFlipper, 'right')
+
+      let reachedFlipper = false
+      let deflectedUpward = false
+      for (let i = 0; i < 60; i++) {
+        stepEngine(table.engine)
+        if (table.ball!.position.y > 580) reachedFlipper = true
+        if (reachedFlipper && table.ball!.velocity.y < 0) {
+          deflectedUpward = true
+          break
+        }
+      }
+
+      expect(reachedFlipper).toBe(true)
+      expect(deflectedUpward).toBe(true)
+      expect(callbacks.onBallLost).not.toHaveBeenCalled()
+      destroyTable(table)
+    })
+
+    it('inactive flippers allow ball to drain through the center gap', () => {
+      const intCallbacks = {
+        onBumperHit: vi.fn(),
+        onGeCatch: vi.fn(),
+        onBallLost: vi.fn(() => {
+          // Stop the ball so it doesn't keep falling and overflow
+          if (table.ball) Matter.Body.setStatic(table.ball, true)
+        }),
+      }
+      const table = createTable(BUMPER_CONFIGS, intCallbacks)
+      launchBall(table)
+
+      // Drop ball straight down through the center gap between both flippers
+      dropBallOntoFlipper(table, 200, 560, 5)
+      // Flippers remain at rest (tips angled down — no activation)
+
+      for (let i = 0; i < 250; i++) {
+        stepEngine(table.engine)
+        if (intCallbacks.onBallLost.mock.calls.length > 0) break
+      }
+
+      expect(intCallbacks.onBallLost).toHaveBeenCalled()
+      destroyTable(table)
+    })
+  })
 })

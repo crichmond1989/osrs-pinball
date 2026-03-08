@@ -210,4 +210,50 @@ describe('PinballCanvas', () => {
     // The render loop runs and calls fillRect — just verify the component rendered correctly
     expect(mockCtx.fillRect).toHaveBeenCalled()
   })
+
+  // --- Regression tests ---
+
+  it('regression: firing plunger does not drain the ball (plunger action itself)', async () => {
+    const { firePlunger: mockFirePlunger } = await import('../engine/physics')
+    const onBallLost = vi.fn()
+    const { rerender } = render(
+      <PinballCanvas {...defaultProps} ballInPlay={true} onBallLost={onBallLost} />,
+    )
+    // Ball is in the plunger lane, static and waiting
+    expect(mockTable.ball).not.toBeNull()
+    expect(mockTable.ball?.isStatic).toBe(true)
+
+    // Player holds plunger, then releases to fire
+    rerender(<PinballCanvas {...defaultProps} ballInPlay={true} onBallLost={onBallLost} plungerHeld={true} />)
+    rerender(<PinballCanvas {...defaultProps} ballInPlay={true} onBallLost={onBallLost} plungerHeld={false} />)
+
+    // Plunger was fired (physics receives the launch command)
+    expect(mockFirePlunger).toHaveBeenCalled()
+    // Ball has NOT been reported as lost — the plunger action itself does not drain the ball
+    expect(onBallLost).not.toHaveBeenCalled()
+    // Ball still exists in the physics table
+    expect(mockTable.ball).not.toBeNull()
+  })
+
+  it('regression: ball dropping below flippers spawns a fresh ball in the plunger gutter', async () => {
+    const { launchBall: mockLaunchBall, removeBall: mockRemoveBall } = await import('../engine/physics')
+    const onBallLost = vi.fn()
+    render(<PinballCanvas {...defaultProps} ballInPlay={true} onBallLost={onBallLost} />)
+
+    const launchCountBefore = (mockLaunchBall as ReturnType<typeof vi.fn>).mock.calls.length
+    const removeCountBefore = (mockRemoveBall as ReturnType<typeof vi.fn>).mock.calls.length
+
+    // Simulate the ball dropping below the flippers and hitting the drain sensor
+    capturedCallbacks!.onBallLost()
+
+    // The drained ball was removed from the physics world
+    expect((mockRemoveBall as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(removeCountBefore)
+    // A fresh ball was immediately placed back in the plunger gutter
+    expect((mockLaunchBall as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(launchCountBefore)
+    // The new ball is static in the gutter (waiting for the plunger)
+    expect(mockTable.ball).not.toBeNull()
+    expect(mockTable.ball?.isStatic).toBe(true)
+    // Parent component was notified so it can update the score / ball count
+    expect(onBallLost).toHaveBeenCalledTimes(1)
+  })
 })

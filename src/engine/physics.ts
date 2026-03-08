@@ -134,11 +134,13 @@ export function createTable(
     label: 'wall',
   })
 
-  // Plunger lane inner wall
-  const plungerWall = Bodies.rectangle(PLUNGER_LANE_X + 3, h / 2, 6, h - 20, { isStatic: true, label: 'wall' })
+  // Plunger lane inner wall — starts at y=380 leaving an open corridor above for the ball to
+  // exit into the main field after being deflected by the topArch.
+  const plungerWall = Bodies.rectangle(PLUNGER_LANE_X + 3, 530, 6, 300, { isStatic: true, label: 'wall' })
 
-  // Top arch — 45° arch at top of plunger lane redirects ball left
-  const topArch = Bodies.rectangle(TABLE_WIDTH - 19, 15, 55, 10, { isStatic: true, restitution: 1.0, angle: Math.PI / 4, label: 'wall' })
+  // Top arch — 45° deflector in the open corridor above the plunger wall.
+  // Positioned so a max-power shot hits the arch and is redirected left into the main field.
+  const topArch = Bodies.rectangle(390, 350, 55, 10, { isStatic: true, restitution: 1.0, angle: Math.PI / 4, label: 'wall' })
 
   const walls = [topWall, leftWall, rightWall, drain, leftGuide, rightGuide, plungerWall, topArch]
 
@@ -197,8 +199,11 @@ export function launchBall(table: PinballTable): Matter.Body {
     (PLUNGER_LANE_X + TABLE_WIDTH) / 2,  // 381
     TABLE_HEIGHT - 60,                    // 640
     BALL_RADIUS,
-    { restitution: 0.6, friction: 0.01, density: 0.004, label: 'ball', isStatic: true },
+    { restitution: 0.6, friction: 0.01, density: 0.004, label: 'ball' },
   )
+  // Must call setStatic after creation (not via options) so Matter.js saves _original
+  // mass/inertia — otherwise setStatic(false) in firePlunger cannot restore finite mass.
+  Body.setStatic(ball, true)
 
   World.add(table.engine.world, ball)
   table.ball = ball
@@ -231,7 +236,11 @@ export function deactivateFlipper(flipper: Matter.Body, direction: 'left' | 'rig
 }
 
 export function stepEngine(engine: Matter.Engine, delta: number = 1000 / 60): void {
-  Engine.update(engine, delta)
+  // Three substeps per logical frame: keeps per-substep movement below half the flipper
+  // height so Matter.js collision detection reliably catches the ball on the flipper.
+  Engine.update(engine, delta / 3)
+  Engine.update(engine, delta / 3)
+  Engine.update(engine, delta / 3)
 }
 
 export function destroyTable(table: PinballTable): void {
